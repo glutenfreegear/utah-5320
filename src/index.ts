@@ -117,6 +117,45 @@ function parseLocalDate(dateString: string): Date {
   return new Date(year, month - 1, day); // month is 0-indexed
 }
 
+// Helper function to sanitize filename components
+function sanitizeFilenameComponent(str: string): string {
+  return str
+    .trim()
+    .replace(/\s+/g, "_") // Replace spaces with underscores
+    .replace(/[^a-zA-Z0-9_.-]/g, "") // Keep only alphanumerics, underscores, hyphens, dots
+    .replace(/_{2,}/g, "_") // Collapse multiple underscores
+    .replace(/^[._-]+|[._-]+$/g, "") // Remove leading/trailing separators
+    .substring(0, 50); // Limit length per component
+}
+
+// Helper function to generate dynamic PDF filename
+function generateFilename(formData: NFAFormData): string {
+  const components: string[] = ["5320.23"];
+
+  // Add responsible person name
+  if (formData.q3a_fullName) {
+    components.push(sanitizeFilenameComponent(formData.q3a_fullName));
+  }
+
+  // Add firearm model
+  if (formData.q4c_model) {
+    components.push(sanitizeFilenameComponent(formData.q4c_model));
+  }
+
+  // Add firearm serial
+  if (formData.q4e_serial) {
+    components.push(sanitizeFilenameComponent(formData.q4e_serial));
+  }
+
+  // Add certification date
+  const dateStr = formData.certificationDate
+    ? formData.certificationDate
+    : new Date().toISOString().split("T")[0];
+  components.push(dateStr);
+
+  return components.join("_") + ".pdf";
+}
+
 // Function to map form data to PDF widget format
 function mapFormDataToPdfFields(formData: NFAFormData): Map<string, string | typeof SELECTED> {
   const fieldsToFill = new Map<string, string | typeof SELECTED>();
@@ -596,7 +635,7 @@ async function generatePDF(): Promise<void> {
     // Create download link and trigger download
     const link = document.createElement("a");
     link.href = url;
-    link.download = "5320.23.pdf";
+    link.download = generateFilename(formData);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
