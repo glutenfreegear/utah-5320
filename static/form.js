@@ -131,6 +131,130 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   };
 
+  const applyPrefillConfig = () => {
+    if (!window.PREFILL_CONFIG) return;
+
+    const config = window.PREFILL_CONFIG;
+    const prefillData = {};
+
+    for (const fieldName in config) {
+      const fieldConfig = config[fieldName];
+      if (!fieldConfig) continue;
+
+      const element = form.elements[fieldName];
+      if (!element) continue;
+
+      // Only prefill if no value from hash
+      const hasValueFromHash = (el) => {
+        if (el.type === "radio" || el.type === "checkbox") {
+          return Array.from(el.length ? el : [el]).some((e) => e.checked);
+        }
+        return !!el.value;
+      };
+
+      if (!hasValueFromHash(element)) {
+        let value = fieldConfig.value;
+
+        // Format phone/SSN if needed
+        if (fieldName === "q3b_telephone" && typeof value === "string") {
+          const digits = value.replace(/\D/g, "");
+          if (digits.length === 10) {
+            value = `(${digits.substring(0, 3)}) ${digits.substring(3, 6)}-${digits.substring(6, 10)}`;
+          }
+        } else if (fieldName === "q3f_ssn" && typeof value === "string") {
+          const cleaned = value.replace(/\D/g, "");
+          if (cleaned.length === 9) {
+            value = `${cleaned.substring(0, 3)}-${cleaned.substring(3, 5)}-${cleaned.substring(5, 9)}`;
+          }
+        }
+
+        // Uppercase text values
+        if (
+          typeof value === "string" &&
+          (element.type === "text" ||
+            element.type === "email" ||
+            element.type === "tel" ||
+            element.tagName === "TEXTAREA")
+        ) {
+          value = value.toUpperCase();
+        }
+
+        prefillData[fieldName] = value;
+      }
+    }
+
+    if (Object.keys(prefillData).length > 0) {
+      deserializeForm(prefillData);
+    }
+  };
+
+  const applyReadonlyLocks = () => {
+    if (!window.PREFILL_CONFIG) return;
+
+    for (const fieldName in window.PREFILL_CONFIG) {
+      const fieldConfig = window.PREFILL_CONFIG[fieldName];
+      if (!fieldConfig || !fieldConfig.readonly) continue;
+
+      const elements = form.elements[fieldName];
+      if (!elements) continue;
+
+      const elementList =
+        elements.length && !elements.tagName ? Array.from(elements) : [elements];
+      elementList.forEach((el) => {
+        el.disabled = true;
+        el.classList.add("prefill-locked");
+
+        // Add lock icon indicator
+        const container = el.closest(
+          ".question-group, .radio-group, .checkbox-group, .sub-input",
+        );
+        if (container && !container.querySelector(".prefill-lock-indicator")) {
+          const indicator = document.createElement("span");
+          indicator.className = "prefill-lock-indicator";
+          indicator.title = "This field is locked by prefill configuration";
+          indicator.innerHTML = "🔒";
+
+          const label =
+            container.querySelector(`label[for="${el.id}"]`) ||
+            el.previousElementSibling ||
+            container.querySelector("legend");
+          if (label) {
+            label.appendChild(indicator);
+          }
+        }
+      });
+    }
+  };
+
+  const lockRelatedOtherFields = () => {
+    if (!window.PREFILL_CONFIG) return;
+
+    const otherFieldMap = {
+      q4a_firearmType: "q4a_firearmType_other",
+      q9a_citizenship: "q9a_citizenship_other",
+      q9c_birthCountry: "q9c_birthCountry_other",
+    };
+
+    for (const [parentField, otherField] of Object.entries(otherFieldMap)) {
+      const parentConfig = window.PREFILL_CONFIG[parentField];
+      if (!parentConfig || !parentConfig.readonly) continue;
+
+      const parentElement = form.elements[parentField];
+      const otherElement = document.getElementById(otherField);
+
+      if (parentElement && otherElement) {
+        const otherSelected = Array.from(
+          parentElement.length ? parentElement : [parentElement],
+        ).some((el) => el.checked && el.value === "OTHER");
+
+        if (otherSelected) {
+          otherElement.disabled = true;
+          otherElement.classList.add("prefill-locked");
+        }
+      }
+    }
+  };
+
   const debounce = (func, delay) => {
     let timeout;
     return function (...args) {
@@ -560,6 +684,10 @@ document.addEventListener("DOMContentLoaded", () => {
       )
     ) {
       form.reset();
+      // Reapply prefill configuration to restore locked fields
+      applyPrefillConfig();
+      applyReadonlyLocks();
+      lockRelatedOtherFields();
       // After reset, re-run all UI update functions to correctly set disabled states etc.
       runAllUIUpdates();
       saveStateToHash(); // This will clear the hash
@@ -573,6 +701,11 @@ document.addEventListener("DOMContentLoaded", () => {
       if (fieldset) {
         const elements = fieldset.querySelectorAll("input, textarea, select");
         elements.forEach((el) => {
+          // Skip prefill-locked fields
+          if (el.classList.contains("prefill-locked")) {
+            return;
+          }
+
           switch (el.type) {
             case "text":
             case "textarea":
@@ -601,7 +734,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Expose serializeForm function globally for TypeScript access
-  window.serializeForm = () => serializeForm(true);
+  // Include readonly prefill values in PDF generation
+  window.serializeForm = () => {
+    const data = serializeForm(true);
+
+    // Include readonly prefill values for PDF generation
+    if (window.PREFILL_CONFIG) {
+      for (const fieldName in window.PREFILL_CONFIG) {
+        const fieldConfig = window.PREFILL_CONFIG[fieldName];
+        if (fieldConfig && fieldConfig.readonly && !(fieldName in data)) {
+          data[fieldName] = fieldConfig.value;
+        }
+      }
+    }
+
+    return data;
+  };
 
   // Generate PDF button
   document
@@ -678,5 +826,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   loadStateFromHash();
+  applyPrefillConfig(); // Apply prefills to empty fields
+  applyReadonlyLocks(); // Lock readonly fields
+  lockRelatedOtherFields(); // Lock related "other" text inputs
   runAllUIUpdates();
 });

@@ -12,7 +12,7 @@ declare global {
 }
 
 // Form data interface matching the HTML form structure
-interface NFAFormData {
+export interface NFAFormData {
   // Question 1
   q1_formType?: string;
 
@@ -113,7 +113,7 @@ function normalizeString(value: string | undefined): string | undefined {
 
 // Helper function to parse date strings as local dates to avoid timezone issues
 function parseLocalDate(dateString: string): Date {
-  const [year, month, day] = dateString.split('-').map(Number);
+  const [year, month, day] = dateString.split("-").map(Number);
   return new Date(year, month - 1, day); // month is 0-indexed
 }
 
@@ -154,14 +154,18 @@ function mapFormDataToPdfFields(
   }
 
   // Question 3a - Responsible Person
-  if (formData.q3a_fullName || formData.q3a_homeAddress || formData.q3a_sameAs2) {
+  if (
+    formData.q3a_fullName ||
+    formData.q3a_homeAddress ||
+    formData.q3a_sameAs2
+  ) {
     let homeAddress = normalizeString(formData.q3a_homeAddress) || "";
-    
+
     // If "SAME AS 2" is checked and address field is empty, use address from Question 2
     if (formData.q3a_sameAs2 && !homeAddress && formData.q2_address) {
       homeAddress = normalizeString(formData.q2_address) || "";
     }
-    
+
     const responsibleInfo = [
       normalizeString(formData.q3a_fullName) || "",
       homeAddress,

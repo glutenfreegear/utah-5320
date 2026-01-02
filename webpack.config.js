@@ -8,7 +8,11 @@ module.exports = (env, argv) => {
   const isProduction = argv.mode === 'production';
   
   return {
-    entry: './src/index.ts',
+    entry: {
+      bundle: './src/index.ts',
+      'prefill-config': './src/prefill-config.ts',
+    },
+    devtool: isProduction ? 'source-map' : 'inline-source-map',
     module: {
       rules: [
         {
@@ -27,10 +31,14 @@ module.exports = (env, argv) => {
       },
     },
     output: {
-      filename: 'bundle.js',
+      filename: '[name].js',
       path: path.resolve(__dirname, 'dist'),
       clean: true,
       publicPath: isProduction ? './' : '/',
+      library: {
+        name: 'PrefillModule',
+        type: 'window',
+      },
     },
     plugins: [
       new HtmlWebpackPlugin({
