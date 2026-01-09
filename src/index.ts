@@ -563,7 +563,7 @@ async function generatePDF(): Promise<void> {
         const renderWidth = 1200; // High-res rendering (wide)
         const renderHeight = 200; // High-res rendering
         const pdfWidth = 100; // Display size in PDF (points)
-        const pdfHeight = 22; // Display size in PDF (points)
+        const pdfHeight = 19; // Display size in PDF (points) - slightly smaller to hide white JPEG background
 
         const signatureSVG = signature.render(Format.SVG, {
           width: renderWidth,
@@ -577,7 +577,7 @@ async function generatePDF(): Promise<void> {
 
         console.log("Signature SVG generated, rasterizing at high resolution...");
 
-        // Rasterize SVG to PNG using OffscreenCanvas at high resolution
+        // Rasterize SVG to canvas
         // Use data URL instead of blob URL to avoid CSP issues
         const svgDataUrl = "data:image/svg+xml;base64," + btoa(signatureSVG);
 
@@ -591,23 +591,28 @@ async function generatePDF(): Promise<void> {
           throw new Error("Failed to get 2D context from OffscreenCanvas");
         }
 
-        // Don't draw background - leave it transparent
+        // Draw white background (JPEG doesn't support transparency)
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(0, 0, renderWidth, renderHeight);
+
         // Draw SVG image at full resolution
         ctx.drawImage(img, 0, 0, renderWidth, renderHeight);
 
-        // Convert to PNG blob
-        const pngBlob = await offscreenCanvas.convertToBlob({ type: "image/png" });
-        const pngArrayBuffer = await pngBlob.arrayBuffer();
-        const pngBytes = new Uint8Array(pngArrayBuffer);
+        // Convert to JPEG for much smaller file size (PNG was causing ~3MB PDFs)
+        const jpegBlob = await offscreenCanvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+        const jpegArrayBuffer = await jpegBlob.arrayBuffer();
+        const jpegBytes = new Uint8Array(jpegArrayBuffer);
 
-        console.log("Signature rasterized to PNG, creating mupdf Image...");
+        console.log(
+          `Signature rasterized to JPEG (${jpegBytes.length} bytes), creating mupdf Image...`
+        );
 
-        // Create mupdf Image from PNG data
-        const imageBuffer = new mupdf.Buffer(pngBytes);
+        // Create mupdf Image from JPEG data
+        const imageBuffer = new mupdf.Buffer(jpegBytes);
         const signatureImage = new mupdf.Image(imageBuffer);
 
         // Add image to PDF document
-        const imageRef = doc.addImage(signatureImage);
+        doc.addImage(signatureImage);
 
         console.log("Finding signature field widgets on all pages...");
 
