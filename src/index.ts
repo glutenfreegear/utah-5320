@@ -7,13 +7,13 @@ import type { NFAFormData } from "./types";
 // Re-export types for backwards compatibility
 export type { NFAFormData };
 
-// Initialize form handling
-initializeForm();
-
 // Expose prefill config globally
 if (typeof window !== "undefined") {
   window.PREFILL_CONFIG = prefillConfig;
 }
+
+// Initialize form handling
+initializeForm();
 
 // Special symbol to represent selected checkboxes/radio buttons
 const SELECTED = Symbol("SELECTED");
